@@ -1,0 +1,519 @@
+---
+title: "visa"
+author: "Narges shahmohammadi(yxs662)"
+date: '2022-10-13'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import libraries
+
+```{r cars , echo=FALSE ,include=FALSE }
+library(caret)
+library(histogram)
+library(mlbench)
+library(e1071)
+library(kernlab)
+library(corrplot)
+library(pls)
+library(elasticnet)
+library(mice)
+library(VIM)
+library(missForest)
+library(epiDisplay)
+library(pROC) 
+library(MASS) 
+library(klaR) 
+library(mda)  
+library(Cubist)
+library(pamr)
+library(ggplot2)
+library(lattice)
+library(foreach)
+library(splines)
+library(gam)
+library(knitr)
+library(dplyr)
+library(moments)
+library(creditmodel)
+library(ROSE)
+library(ROCR)
+library(readxl)
+library(MLmetrics)
+```
+
+# load the data
+```{r, echo=FALSE}
+setwd("C:/Users/narge/OneDrive/Fall 2022/DATA APPLICATIONS/pro")
+visa = read.csv("Visa.csv")
+str(visa)
+```
+* The dataset has 25480 rows and 12 columns 
+* `no_of_employees`, ` yr_of_estab`, and `prevailing_wage` are numeric features while rest are objects.
+```{r}
+visa$case_id <- factor(visa$case_id)
+visa$continent <- factor(visa$continent)
+visa$education_of_employee <- factor(visa$education_of_employee)
+visa$has_job_experience <- factor(visa$has_job_experience)
+visa$requires_job_training <- factor(visa$requires_job_training)
+visa$region_of_employment <- factor(visa$region_of_employment)
+visa$unit_of_wage <- factor(visa$unit_of_wage)
+visa$full_time_position <- factor(visa$full_time_position)
+visa$case_status <- factor(visa$case_status)
+```
+
+
+```{r}
+sum(is.na(visa))
+```
+* There are no null or missing values in the dataset.
+
+```{r}
+sum(duplicated(visa))
+```
+* There are no duplicate values in the data. 
+
+## EDA
+```{r}
+#par(mfrow=c(3,4))
+hist (visa$no_of_employees,xlab = "no_of_employees", main = "no_of_employees",col='light blue')
+hist (visa$yr_of_estab,xlab = "yr_of_estab", main = "yr_of_estab",col='light blue')
+hist (visa$prevailing_wage,xlab = "prevailing_wage", main = "prevailing_wage",col='light blue')
+```
+```{r}
+mean(visa$prevailing_wage)
+```
+#### The median prevailing wage of the employees is around 74k. 
+
+```{r}
+mean (visa$no_of_employees)
+```
+```{r}
+unique(visa$no_of_employees)
+```
+
+* The distribution of the number of employees is heavily right-skewed.
+Some companies have more than 500k employees. Such companies might have multiple offices around the world. The range of the number of employees in a company is huge. There are some anomalies in the data as we can see that the minimum number of employees is equal to -25, which is not possible. I will have to fix this. also its mean is 5667.089 
+* The year of establishment of companies ranges from 1800 to 2016, which seems fine.
+* The average prevailing wage is 74455.81. There's also a very huge difference in 75th percentile and maximum value which indicates there might be outliers present in this column.
+
+
+```{r}
+sum (visa$no_of_employees< 0)
+```
+* I will consider the 33 observations as data entry errors and take the absolute values for this column.
+
+```{r}
+visa['no_of_employees'] = abs(visa['no_of_employees'])
+```
+
+```{r}
+unique(visa$no_of_employees)
+```
+
+## Let's check the count of each unique category in each of the categorical variables.
+```{r}
+library(ggplot2)
+ggplot(visa,aes(continent))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+
+
+### Most of the applications in data are from Asians followed by Europeans.
+
+```{r}
+ggplot(visa,aes(education_of_employee))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### Most of the applicants have a bachelor's degree followed by a master's degree.
+
+```{r}
+ggplot(visa,aes(has_job_experience))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### Most of the applicants have job experience and do not require job training.
+
+```{r}
+ggplot(visa,aes(	
+requires_job_training))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### Most of the applicants have job experience and do not require job training.
+
+```{r}
+ggplot(visa,aes(	
+region_of_employment))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### Most applicants have their worksite in the Northeast region of the US.
+
+```{r}
+ggplot(visa,aes(	
+unit_of_wage))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+* Unit of prevailing wage is an important factor for differentiating between a certified and a denied visa application.
+* If the unit of prevailing wage is Yearly, there's a high chance of the application getting certified.
+
+
+```{r}
+ggplot(visa,aes(	
+full_time_position))+geom_bar(aes(fill=case_status))+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### Most of the visa applications are for full-time job positions.
+
+```{r}
+ggplot(visa,aes(	
+ case_status))+geom_bar(aes(fill=case_status))+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+### The target column case status is imbalanced with many applicants having a certified visa.
+```{r}
+visa.numeric <- visa[, unlist(lapply(visa, is.numeric))]
+corrplot::corrplot(cor(visa.numeric), method = 'color', order = 'alphabet')
+corrplot::corrplot(cor(visa.numeric), method = 'number') 
+```
+#### there are no correlation between numeric variables
+## check the outliers
+```{r}
+par(mfrow=c(2,2))
+
+boxplot(visa$no_of_employees)
+boxplot(visa$prevailing_wage)
+boxplot(visa$yr_of_estab)
+```
+- There are quite a few outliers in the data.
+- deleting outliers
+```{r}
+detect_outlier <- function(x) {
+ 
+    # calculate first quantile
+    Quantile1 <- quantile(x, probs=.25)
+ 
+    # calculate third quantile
+    Quantile3 <- quantile(x, probs=.75)
+ 
+    # calculate inter quartile range
+    IQR = Quantile3-Quantile1
+ 
+    # return true or false
+    x > Quantile3 + (IQR*1.5) | x < Quantile1 - (IQR*1.5)
+}
+
+# create remove outlier function
+remove_outlier <- function(dataframe,
+                            columns=names(dataframe)) {
+ 
+    # for loop to traverse in columns vector
+    for (col in columns) {
+ 
+        # remove observation if it satisfies outlier function
+        dataframe <- dataframe[!detect_outlier(dataframe[[col]]), ]
+    }
+ 
+    # return dataframe
+    print("Remove outliers")
+    print(dataframe)
+}
+
+
+```
+
+```{r}
+
+visa1<-remove_outlier(visa, c('prevailing_wage', 'no_of_employees', 'yr_of_estab')) 
+```
+
+
+
+```{r}
+
+par(mfrow=c(2,2))
+
+boxplot(visa1$prevailing_wage)
+boxplot(visa1$yr_of_estab)
+boxplot(visa1$no_of_employees)
+```
+### it got better...
+
+
+### Data Preparation for modeling
+
+- I want to predict which visa will be certified.
+- I think dont need to case_id column so I will delete it . also, I think that some columns need to be to be dummy 
+- I'll split the data into train and test to be able to evaluate the model that I build on the train data.
+- finally I will check if the train set is balanced data
+
+```{r}
+visa3 <- subset (visa, select = -c(case_id))
+visa3
+```
+
+```{r}
+visa3 <- mutate(visa3,continent_Asia = ifelse(continent=="Asia",1,0))
+visa3 <- mutate(visa3,continent_Europe= ifelse(continent=="Europe",1,0))
+visa3 <- mutate(visa3,continent_Africa= ifelse(continent=="Africa",1,0))
+visa3 <- mutate(visa3,continent_South_America = ifelse(continent=="South America",1,0))
+visa3 <- mutate(visa3,continent_North_America = ifelse(continent=="North America",1,0))
+visa3 <- mutate(visa3,continent_Oceania = ifelse(continent=="Oceania",1,0))
+
+visa3 <- mutate(visa3,unit_of_wage_Year = ifelse(unit_of_wage=="Year",1,0))
+visa3 <- mutate(visa3,unit_of_wage_Week = ifelse(unit_of_wage=="Week",1,0))
+visa3 <- mutate(visa3,unit_of_wage_Month = ifelse(unit_of_wage=="Month",1,0))
+visa3 <- mutate(visa3,unit_of_wage_Hour = ifelse(unit_of_wage=="Hour",1,0))
+
+visa3 <- mutate(visa3,region_of_employment_Island = ifelse(region_of_employment=="Island",1,0))
+visa3 <- mutate(visa3,region_of_employment_West = ifelse(region_of_employment=="West",1,0))
+visa3 <- mutate(visa3,region_of_employment_Northeast = ifelse(region_of_employment=="Northeast",1,0))
+visa3 <- mutate(visa3,region_of_employment_Midwest = ifelse(region_of_employment=="Midwest",1,0))
+visa3 <- mutate(visa3,region_of_employment_South = ifelse(region_of_employment=="South",1,0))
+
+visa3 <- mutate(visa3,education_of_employee_High_School = ifelse(education_of_employee=="High School",1,0))
+visa3 <- mutate(visa3,education_of_employee_Doctorate = ifelse(education_of_employee=="Doctorate",1,0))
+visa3 <- mutate(visa3,education_of_employee_Bachelor_s = ifelse(education_of_employee=="Bachelor's",1,0))
+visa3 <- mutate(visa3,education_of_employee_Master_s = ifelse(education_of_employee=="Master's",1,0))
+
+```
+
+```{r}
+set.seed(123)
+visa2 <- sample(c(TRUE, FALSE), nrow(visa3), replace=TRUE, prob=c(0.7,0.3))
+train <- visa3[visa2, ]
+test <- visa3[!visa2, ]
+```
+
+FIRST CHECK IF WE HAVE IMBALANCE DATA
+```{r}
+table(train$case_status)
+```
+
+## as you can see we have imbalanced data . I use over sampling to solve this problem after split the data to test and train
+## ovun.sample: Over-sampling, under-sampling, combination of over- and under-sampling.
+```{r}
+train <- ovun.sample(case_status ~ ., data = train, method = "over")$data
+table(train$case_status)
+```
+
+## now I can run the model#################################
+
+
+### Model evaluation criterion
+
+### Model can make wrong predictions as:
+
+1. Model predicts that the visa application will get certified but in reality, the visa application should get denied.
+2. Model predicts that the visa application will not get certified but in reality, the visa application should get certified. 
+
+### Which case is more important? 
+* Both the cases are important as:
+
+* If a visa is certified when it had to be denied a wrong employee will get the job position while US citizens will miss the opportunity to work on that position.
+
+* If a visa is denied when it had to be certified the U.S. will lose a suitable human resource that can contribute to the economy. 
+
+### How to reduce the losses?
+
+* `F1 Score` can be used a the metric for evaluation of the model, greater the F1 score higher are the chances of minimizing False Negatives and False Positives. 
+* We will use balanced class weights so that model focuses equally on both classes.
+
+### Decision Tree Model
+
+
+
+
+```{r}
+formula = case_status ~ has_job_experience  + requires_job_training +no_of_employees  +yr_of_estab+prevailing_wage+full_time_position  +continent_Asia+continent_Europe+          continent_Africa+continent_South_America+continent_North_America+continent_Oceania+unit_of_wage_Year+unit_of_wage_Week+                unit_of_wage_Month+unit_of_wage_Hour+region_of_employment_Island+region_of_employment_West+region_of_employment_Northeast+region_of_employment_Midwest+region_of_employment_South+education_of_employee_High_School+education_of_employee_Doctorate+education_of_employee_Bachelor_s+education_of_employee_Master_s
+
+
+```
+
+
+```{r}
+
+#train<-subset(train,select=-c(unit_of_wage,region_of_employment,education_of_employee,continent))
+```
+
+```{r}
+library(tree)
+library(caret)
+tree.model= tree(formula, data=train , method='class')
+summary(tree.model)
+```
+
+```{r}
+plot(tree.model)
+text(tree.model,pretty = 0,cex=0.6)
+```
+I don't think that we need tuning this tree...
+
+```{r}
+test <- test[,!names(test) %in% 'case_id']
+```
+
+# prediction
+```{r}
+pred.tree=predict(tree.model,test, type = 'class')
+```
+
+```{r}
+print(length(test$case_status))
+print(length(pred.tree))
+```
+
+
+```{r}
+plot(pred.tree, test$case_status)
+```
+
+```{r}
+caret::confusionMatrix(as.factor(test$case_status),(pred.tree))
+```
+
+The model has predicted Denied as Denied (True negative),1492 times and Denied as Certified (False negative), 1778 time.
+The model has predicted Certified as Denied (False positive),539 times and Certified as Certified , (True positive)2252 times.
+The accuracy of the model is 61% which is not very high.
+# F1 SCORE
+```{r}
+library(MLmetrics)
+F1_Score(pred.tree,test$case_status)
+
+```
+The F-score, also called the F1-score, is a measure of a model's accuracy on a data set. 
+I have F1 score of 0.73 which is not very good. so lets try simple logistic regression.
+#  logistic regression
+
+```{r}
+Log_reg <- glm(formula , data = train, family = binomial())
+summary(Log_reg)
+```
+First notice that this coefficient is statistically significant (associated with a p-value < 0.05), so these predictors influence on case status:
+continentEurope / education_of_employee / has_job_experienceY / region_of_employment /unit_of_wage / full_time_positionY 
+```{r}
+pscl::pR2(Log_reg)["McFadden"]
+```
+A value of 0.17 is quite low for McFadden’s R2, which indicates that our model does not fits the data very well and has low predictive power.
+
+# PREDICTION glm
+```{r}
+test$Pred = predict.glm(Log_reg, newdata = test, type ="response")
+```
+
+```{r}
+test$case_status  <- factor(test$case_status  )
+```
+
+```{r}
+test$Prediction = ifelse(test$Pred >=0.5,"Certified","Denied")
+test$Prediction  <- factor(test$Prediction )
+table(test$Prediction)
+```
+
+```{r}
+caret::confusionMatrix((test$case_status),as.factor(test$Prediction))
+
+```
+Accuracy of glm is 28% and it is very low
+
+```{r}
+F1_Score(test$Prediction,test$case_status)
+```
+F1 score is also very low. so we can say this model is not good at all
+
+
+## randomForest model
+```{r }
+library(randomForest)
+random_Forest <- randomForest(formula, data= train) 
+```
+
+```{r}
+p1 <- predict(random_Forest, test)
+confusionMatrix(p1, test$case_status)
+```
+Accuracy of this model is 0.72. this result is better than others
+```{r}
+F1_Score(p1,test$case_status)
+
+```
+
+also its F1 score is good
+
+```{r}
+random_Forest$importance
+```
+## tuning RandomForest
+```{r , echo=FALSE ,include=FALSE }
+library(randomForestSRC)
+library(mlbench)
+library(caret)
+library(e1071)
+
+set.seed(123)
+
+train$case_status <- as.factor(train$case_status)
+
+rf.forest1 <- rfsrc(formula,data = train, do.trace=T,
+                 importance = TRUE,
+                 ntree = 1000)
+
+```
+
+## prediction
+
+```{r}
+predicted_tunedrf <- predict(rf.forest1,test)
+
+print(predicted_tunedrf)
+```
+
+* Misclassification Rate: It tells you what fraction of predictions were incorrect; its formula is : (1-Accuracy) so we can say that the accuracy is about %72 which is pretty close to simple random forest model, but with comparison between their confusion metrics it seems that tuned random model is better 
+
+* Tuned Random Forest model has given a good and generalized performance. We will use it as our final model.
+
+## Compute variable importance to detect interactions and optimize hyper- parameters for acquired customers.
+
+```{r}
+rf.forest1$importance
+```
+
+
+* Looking at the feature importance of the Random Forest model, the top 4 important features to look for while certifying a visa are Education of the employee, Job experience , no_of_employees and prevailing_wage. 
+
+### Recommendations
+
+###################
+
+**The profile of the applicants for whom the visa status can be approved:**
+
+**Primary information to look at:**
+- Education level - At least has a Bachelor's degree - Master's and doctorate are preferred.
+- Job Experience - Should have some job experience. 
+- Prevailing wage - The median prevailing wage for the certified applications is slightly higher as compared to denied applications. 
+
+
+**Secondary information to look at:**
+
+- Unit of Wage- Applicants having a yearly unit of wage. 
+- Continent - Ideally the nationality and ethnicity of an applicant shouldn't matter to work in a country but previously it has been observed that applicants from Europe, and Asia have higher chances of visa certification.
+- Region of employment - the analysis suggests that the applications to work in the Mid-West region have more chances of visa approval. The approvals can also be made based on requirement of talent, from our analysis we see that:
+    * The requirement for the applicants who have passed high school is most in the South region, followed by Northeast region.
+    * The requirement for Bachelor's is mostly in South region, followed by West region.
+    * The requirement for Master's is most in Northeast region, followed by South region.
+    * The requirement for Doctorate's is mostly in West region, followed by Northeast region.
+    
+    
+**The profile of the applicants for whom the visa status can be denied:**
+
+**Primary information to look at:**
+- Education level - Doesn't have any degree 
+- Job Experience - Doesn't have any job experience. 
+- Prevailing wage - The median prevailing wage of the employees for whom the visa got certified is around 65k. 
+
+
+**Secondary information to look at:**
+
+- 'Unit of Wage' - Applicants having an hourly unit of wage. 
+- 'Continent' - Ideally the nationality and ethnicity of an applicant shouldn't matter to work in a country but previously it has been observed that applicants from South America, North America, and Oceania have higher chances of visa applications getting denied.
